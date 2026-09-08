@@ -383,6 +383,13 @@ function createWindow() {
     show: false,
     backgroundColor: '#0b0f15',
     title: 'Offline JS Lab',
+    // macOS 上把红绿灯按钮嵌入顶栏，Windows 保持系统默认标题栏。
+    ...(process.platform === 'darwin'
+      ? {
+          titleBarStyle: 'hiddenInset',
+          trafficLightPosition: { x: 14, y: 20 },
+        }
+      : {}),
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,

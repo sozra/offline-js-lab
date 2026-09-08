@@ -252,6 +252,7 @@ npm 操作原则：
 - Monaco 从 `node_modules/monaco-editor/min` 加载；
 - 打包时复制到 `resources/monaco`；
 - 同时兼容 Monaco 0.55+ 顶层 `monaco.typescript` 与旧命名空间；
+- 编辑器使用自定义主题 `offline-js-lab-dark`（`renderer/app.js` 中的 `EDITOR_THEME`），基于 `vs-dark` 继承，仅覆盖背景、行号、光标、选区等颜色，与 `styles.css` 的表面色 token 保持一致；修改外壳配色时需同步该主题；
 - `WorkspaceService.collectTypeDefinitions()` 扫描工作区包中的 `.d.ts`；
 - Renderer 使用 `addExtraLib()` 注入 TypeScript/JavaScript language service；
 - 当前有文件数与总字节限制，避免大型 `node_modules` 让编辑器失去响应。
@@ -266,11 +267,13 @@ npm 操作原则：
 ## 12. UI 约定
 
 - 主界面保持左右双栏，左侧代码、右侧输出；
+- macOS 使用 `titleBarStyle: 'hiddenInset'`，顶栏整体为 `-webkit-app-region: drag`，交互控件需声明 `no-drag`，并通过 `body.platform-darwin` 为红绿灯按钮预留左侧 88px；Windows 保持系统默认标题栏；
 - 分隔条可拖动、双击恢复 50:50，并支持键盘调整；
 - 高频运行控制放在顶部或输出头部；
 - 低频工作区和 npm 操作放在“包与工作区”对话框；
 - UI 文案以简体中文为主，代码标识符使用英文；
 - 保持深色、紧凑、桌面工具风格；
+- 表面颜色使用 `styles.css` 顶部的 token（`--surface`、`--surface-inset`、`--surface-raised` 等），不在组件里散落一次性色值；正文字号不低于 11px，对话框与标签正文使用 12px；
 - 不引入重量级 UI 框架来完成简单控件；
 - 新控件必须有可访问的 label/title，并兼顾窄窗口布局。
 

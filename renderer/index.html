@@ -33,28 +33,52 @@
 
           <div class="toolbar-divider" aria-hidden="true"></div>
 
-          <label class="compact-field">
-            <span>语言</span>
-            <select id="language-select" aria-label="脚本语言">
-              <option value="typescript">TypeScript</option>
-              <option value="javascript">JavaScript</option>
-            </select>
-          </label>
+          <div class="segmented" role="group" aria-label="脚本语言">
+            <button
+              id="language-typescript-button"
+              class="segment"
+              type="button"
+              aria-pressed="true"
+            >
+              TypeScript
+            </button>
+            <button
+              id="language-javascript-button"
+              class="segment"
+              type="button"
+              aria-pressed="false"
+            >
+              JavaScript
+            </button>
+          </div>
 
-          <label class="compact-field run-mode-field">
-            <span>运行</span>
-            <select id="run-mode-select" aria-label="运行模式">
-              <option value="manual">手动</option>
-              <option value="live">实时</option>
-            </select>
-          </label>
+          <div class="segmented" role="group" aria-label="运行模式">
+            <button
+              id="run-mode-manual-button"
+              class="segment"
+              type="button"
+              aria-pressed="true"
+            >
+              手动
+            </button>
+            <button
+              id="run-mode-live-button"
+              class="segment"
+              type="button"
+              aria-pressed="false"
+            >
+              实时
+            </button>
+          </div>
 
           <button id="run-button" class="button button-primary" type="button">
-            <span>运行</span>
+            <span class="button-spinner" aria-hidden="true"></span>
+            <span id="run-label">运行</span>
             <kbd id="run-shortcut">Ctrl+Enter</kbd>
           </button>
           <button id="stop-button" class="button button-danger" type="button" disabled>
-            停止
+            <span>停止</span>
+            <kbd id="stop-shortcut">Ctrl+.</kbd>
           </button>
 
           <div class="toolbar-divider" aria-hidden="true"></div>
@@ -133,7 +157,7 @@
         <header class="dialog-header">
           <div>
             <h2>包与工作区</h2>
-            <p>低频设置集中在这里，不占用日常编辑空间。</p>
+            <p>管理脚本依赖与 node_modules 所在的工作区目录。</p>
           </div>
           <button id="close-dialog-button" class="icon-button" type="button" aria-label="关闭">
             ×
@@ -219,6 +243,17 @@
           <span id="npm-status-text">npm 空闲</span>
           <button id="dialog-done-button" class="button button-secondary" type="button">完成</button>
         </footer>
+      </div>
+    </dialog>
+
+    <dialog id="confirm-dialog" class="confirm-dialog">
+      <div class="confirm-shell">
+        <h2 id="confirm-title">确认</h2>
+        <p id="confirm-message"></p>
+        <div class="confirm-actions">
+          <button id="confirm-cancel-button" class="button button-ghost" type="button">取消</button>
+          <button id="confirm-ok-button" class="button button-primary" type="button">确定</button>
+        </div>
       </div>
     </dialog>
 

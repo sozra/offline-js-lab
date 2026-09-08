@@ -1,6 +1,6 @@
 {
   "name": "offline-js-lab",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "A local cross-platform JavaScript and TypeScript scratchpad built with Electron.",
   "main": "electron/main.cjs",
   "private": true,

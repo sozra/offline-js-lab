@@ -8,6 +8,7 @@ const test = require('node:test');
 const root = path.resolve(__dirname, '..');
 const html = fs.readFileSync(path.join(root, 'renderer', 'index.html'), 'utf8');
 const appSource = fs.readFileSync(path.join(root, 'renderer', 'app.js'), 'utf8');
+const mainSource = fs.readFileSync(path.join(root, 'electron', 'main.cjs'), 'utf8');
 
 test('Renderer 查询的全部元素 ID 都存在于 HTML 中', () => {
   const queriedIds = [...appSource.matchAll(/document\.querySelector\('#([^']+)'\)/g)]
@@ -41,4 +42,14 @@ test('手动和实时运行共用可持久化的运行前清空设置', () => {
 test('兼容 Monaco 0.55+ 的顶层 TypeScript API', () => {
   assert.match(appSource, /monaco\.typescript \|\| monaco\.languages\?\.typescript/);
   assert.match(appSource, /state\.monaco\.typescript \|\| state\.monaco\.languages\?\.typescript/);
+});
+
+test('Monaco 使用与应用外壳一致的自定义深色主题', () => {
+  assert.match(appSource, /defineTheme\(EDITOR_THEME/);
+  assert.match(appSource, /theme: EDITOR_THEME/);
+});
+
+test('macOS 使用隐藏式标题栏并为红绿灯按钮预留顶栏空间', () => {
+  assert.match(mainSource, /titleBarStyle: 'hiddenInset'/);
+  assert.match(appSource, /platform-darwin/);
 });

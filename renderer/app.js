@@ -4,6 +4,7 @@ const api = window.offlineJsLab;
 const AUTO_RUN_DELAY_MS = 500;
 const MIN_PANE_WIDTH = 260;
 const DEFAULT_SPLIT_RATIO = 0.5;
+const EDITOR_THEME = 'offline-js-lab-dark';
 
 const DEFAULT_TYPESCRIPT = `type RecordItem = {
   projectName: string;
@@ -55,11 +56,15 @@ const elements = {
   openButton: document.querySelector('#open-button'),
   saveButton: document.querySelector('#save-button'),
   saveAsButton: document.querySelector('#save-as-button'),
-  languageSelect: document.querySelector('#language-select'),
-  runModeSelect: document.querySelector('#run-mode-select'),
+  languageTypeScriptButton: document.querySelector('#language-typescript-button'),
+  languageJavaScriptButton: document.querySelector('#language-javascript-button'),
+  runModeManualButton: document.querySelector('#run-mode-manual-button'),
+  runModeLiveButton: document.querySelector('#run-mode-live-button'),
   runButton: document.querySelector('#run-button'),
+  runLabel: document.querySelector('#run-label'),
   runShortcut: document.querySelector('#run-shortcut'),
   stopButton: document.querySelector('#stop-button'),
+  stopShortcut: document.querySelector('#stop-shortcut'),
   packagesButton: document.querySelector('#packages-button'),
   fileName: document.querySelector('#file-name'),
   dirtyIndicator: document.querySelector('#dirty-indicator'),
@@ -92,6 +97,11 @@ const elements = {
   refreshPackagesButton: document.querySelector('#refresh-packages-button'),
   installedPackageList: document.querySelector('#installed-package-list'),
   npmStatusText: document.querySelector('#npm-status-text'),
+  confirmDialog: document.querySelector('#confirm-dialog'),
+  confirmTitle: document.querySelector('#confirm-title'),
+  confirmMessage: document.querySelector('#confirm-message'),
+  confirmOkButton: document.querySelector('#confirm-ok-button'),
+  confirmCancelButton: document.querySelector('#confirm-cancel-button'),
   toastRegion: document.querySelector('#toast-region'),
 };
 
@@ -175,16 +185,51 @@ function clearOutput() {
   elements.output.replaceChildren();
 }
 
+const TOAST_ICONS = { success: '✓', error: '✕', info: 'ℹ' };
+const TOAST_DURATION_MS = { success: 3600, info: 3600, error: 8000 };
+
 function showToast(message, type = 'info') {
   const toast = document.createElement('div');
-  toast.className = `toast ${type}`;
-  toast.textContent = String(message);
+  toast.className = `toast ${TOAST_ICONS[type] ? type : 'info'}`;
+
+  const icon = document.createElement('span');
+  icon.className = 'toast-icon';
+  icon.textContent = TOAST_ICONS[type] || TOAST_ICONS.info;
+
+  const text = document.createElement('span');
+  text.className = 'toast-message';
+  text.textContent = String(message);
+
+  const closeButton = document.createElement('button');
+  closeButton.type = 'button';
+  closeButton.className = 'toast-close';
+  closeButton.textContent = '×';
+  closeButton.setAttribute('aria-label', '关闭通知');
+  closeButton.addEventListener('click', () => toast.remove());
+
+  toast.append(icon, text, closeButton);
   elements.toastRegion.appendChild(toast);
-  window.setTimeout(() => toast.remove(), 3600);
+  window.setTimeout(
+    () => toast.remove(),
+    TOAST_DURATION_MS[type] || TOAST_DURATION_MS.info,
+  );
 }
 
-function setEditorMessage(message) {
+let editorMessageTimer = null;
+
+function setEditorMessage(message, { transient = false } = {}) {
+  if (editorMessageTimer) {
+    window.clearTimeout(editorMessageTimer);
+    editorMessageTimer = null;
+  }
+  elements.editorMessage.classList.remove('is-faded');
   elements.editorMessage.textContent = message || '';
+  if (transient && message) {
+    editorMessageTimer = window.setTimeout(() => {
+      editorMessageTimer = null;
+      elements.editorMessage.classList.add('is-faded');
+    }, 4000);
+  }
 }
 
 function setRunStatus(label, kind = 'idle') {
@@ -208,8 +253,33 @@ function updateFileIdentity() {
 function updateStatusText() {
   const workspacePath = state.packageState?.workspacePath || '工作区未就绪';
   const modeText = state.runMode === 'live' ? '实时运行' : '手动运行';
-  elements.statusText.textContent = `${modeText} · ${workspacePath}`;
+  const workspaceName = state.packageState?.workspacePath
+    ? workspacePath.split(/[\\/]/).filter(Boolean).pop()
+    : workspacePath;
+  elements.statusText.textContent = `${modeText} · ${workspaceName}`;
   elements.statusText.title = workspacePath;
+}
+
+function syncSegmentedControls() {
+  const languageButtons = {
+    typescript: elements.languageTypeScriptButton,
+    javascript: elements.languageJavaScriptButton,
+  };
+  for (const [language, button] of Object.entries(languageButtons)) {
+    const active = state.language === language;
+    button.classList.toggle('is-active', active);
+    button.setAttribute('aria-pressed', String(active));
+  }
+
+  const runModeButtons = {
+    manual: elements.runModeManualButton,
+    live: elements.runModeLiveButton,
+  };
+  for (const [mode, button] of Object.entries(runModeButtons)) {
+    const active = state.runMode === mode;
+    button.classList.toggle('is-active', active);
+    button.setAttribute('aria-pressed', String(active));
+  }
 }
 
 function syncControls() {
@@ -218,10 +288,13 @@ function syncControls() {
   const packageBlocked = running || state.npmBusy;
 
   elements.runButton.disabled = !state.editor || running || state.npmBusy;
+  elements.runButton.classList.toggle('is-busy', running);
+  elements.runLabel.textContent = running ? '运行中' : '运行';
   elements.stopButton.disabled = !state.runId;
   elements.newButton.disabled = fileBlocked;
   elements.openButton.disabled = fileBlocked;
-  elements.languageSelect.disabled = fileBlocked;
+  elements.languageTypeScriptButton.disabled = fileBlocked;
+  elements.languageJavaScriptButton.disabled = fileBlocked;
   elements.chooseWorkspaceButton.disabled = packageBlocked;
   elements.packageInput.disabled = state.npmBusy;
   elements.devDependencyCheckbox.disabled = state.npmBusy;
@@ -259,8 +332,12 @@ function replaceEditorValue(value) {
 }
 
 function setLanguage(language, { replaceDefault = false, scheduleRun = true } = {}) {
-  state.language = language === 'javascript' ? 'javascript' : 'typescript';
-  elements.languageSelect.value = state.language;
+  const normalized = language === 'javascript' ? 'javascript' : 'typescript';
+  if (state.editor && state.language === normalized) {
+    return;
+  }
+  state.language = normalized;
+  syncSegmentedControls();
 
   if (state.editor && state.monaco) {
     state.monaco.editor.setModelLanguage(state.editor.getModel(), state.language);
@@ -316,6 +393,33 @@ function configureMonaco(monaco) {
   if (!typescript) {
     throw new Error('Monaco TypeScript language service 未加载。');
   }
+
+  // 让编辑器背景与外壳的冷蓝黑 token 保持一致，避免 vs-dark 默认灰蓝的割裂感。
+  monaco.editor.defineTheme(EDITOR_THEME, {
+    base: 'vs-dark',
+    inherit: true,
+    rules: [],
+    colors: {
+      'editor.background': '#0e141d',
+      'editor.lineHighlightBackground': '#16202c',
+      'editorLineNumber.foreground': '#44536a',
+      'editorLineNumber.activeForeground': '#96a4b8',
+      'editorCursor.foreground': '#94bfff',
+      'editor.selectionBackground': '#3d75c955',
+      'editor.inactiveSelectionBackground': '#3d75c933',
+      'editorIndentGuide.background1': '#1d2836',
+      'editorIndentGuide.activeBackground1': '#2c3b4f',
+      'editorBracketMatch.background': '#3d75c933',
+      'editorBracketMatch.border': '#3a4a60',
+      'editorWidget.background': '#131b26',
+      'editorWidget.border': '#273344',
+      'input.background': '#0a1017',
+      'scrollbarSlider.background': '#3a4a6055',
+      'scrollbarSlider.hoverBackground': '#3a4a6088',
+      'scrollbarSlider.activeBackground': '#72a9ff88',
+    },
+  });
+
   const moduleResolution =
     typescript.ModuleResolutionKind.NodeJs ||
     typescript.ModuleResolutionKind.Node10 ||
@@ -358,9 +462,8 @@ function createEditor(monaco) {
     : 'manual';
   state.clearOutputOnRun =
     storageGet('offlineJsLab.clearOutputOnRun', 'true') !== 'false';
-  elements.languageSelect.value = state.language;
-  elements.runModeSelect.value = state.runMode;
   elements.clearOutputOnRunCheckbox.checked = state.clearOutputOnRun;
+  syncSegmentedControls();
 
   const fallbackCode =
     state.language === 'typescript' ? DEFAULT_TYPESCRIPT : DEFAULT_JAVASCRIPT;
@@ -372,7 +475,7 @@ function createEditor(monaco) {
 
   state.editor = monaco.editor.create(elements.editorHost, {
     model,
-    theme: 'vs-dark',
+    theme: EDITOR_THEME,
     automaticLayout: true,
     fontFamily: 'SFMono-Regular, Cascadia Code, Consolas, monospace',
     fontLigatures: true,
@@ -491,6 +594,56 @@ async function refreshPackageState() {
   }
 }
 
+function setRunMode(mode) {
+  const normalized = mode === 'live' ? 'live' : 'manual';
+  if (state.runMode === normalized) {
+    return;
+  }
+  state.runMode = normalized;
+  syncSegmentedControls();
+  persistScratch();
+  updateStatusText();
+  if (state.runMode === 'live') {
+    scheduleAutoRun(80);
+  } else {
+    cancelAutoRun();
+  }
+}
+
+function confirmAction({ title, message, confirmLabel = '确定', danger = false }) {
+  const dialog = elements.confirmDialog;
+  if (dialog.open) {
+    return Promise.resolve(false);
+  }
+
+  elements.confirmTitle.textContent = title;
+  elements.confirmMessage.textContent = message;
+  elements.confirmOkButton.textContent = confirmLabel;
+  elements.confirmOkButton.classList.toggle('button-danger', danger);
+  elements.confirmOkButton.classList.toggle('button-primary', !danger);
+
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (result) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      dialog.removeEventListener('cancel', onCancel);
+      if (dialog.open) {
+        dialog.close();
+      }
+      resolve(result);
+    };
+    const onCancel = () => finish(false);
+
+    elements.confirmOkButton.onclick = () => finish(true);
+    elements.confirmCancelButton.onclick = () => finish(false);
+    dialog.addEventListener('cancel', onCancel);
+    dialog.showModal();
+  });
+}
+
 async function refreshTypeDefinitions() {
   if (!state.monaco) {
     return;
@@ -520,7 +673,9 @@ async function refreshTypeDefinitions() {
     }
 
     const suffix = result.truncated ? '，已达到读取上限' : '';
-    setEditorMessage(`已加载 ${(result.files || []).length} 个类型文件${suffix}`);
+    setEditorMessage(`已加载 ${(result.files || []).length} 个类型文件${suffix}`, {
+      transient: true,
+    });
   } catch (error) {
     setEditorMessage('类型定义加载失败');
     appendOutput(`类型定义加载失败：${error.message}\n`, 'stderr');
@@ -689,12 +844,20 @@ async function stopRun({ preserveAutoRun = false } = {}) {
   }
 }
 
-function canDiscardChanges() {
-  return !state.dirty || window.confirm('当前脚本尚未保存，是否放弃这些修改？');
+function confirmDiscardChanges() {
+  if (!state.dirty) {
+    return Promise.resolve(true);
+  }
+  return confirmAction({
+    title: '放弃未保存的修改？',
+    message: '当前脚本尚未保存，继续操作将丢失这些修改。',
+    confirmLabel: '放弃修改',
+    danger: true,
+  });
 }
 
-function newFile() {
-  if (!canDiscardChanges()) {
+async function newFile() {
+  if (!(await confirmDiscardChanges())) {
     return;
   }
 
@@ -708,7 +871,7 @@ function newFile() {
 }
 
 async function openFile() {
-  if (!canDiscardChanges()) {
+  if (!(await confirmDiscardChanges())) {
     return;
   }
 
@@ -845,7 +1008,13 @@ async function installPackages() {
 }
 
 async function uninstallPackage(packageName) {
-  if (!window.confirm(`确定卸载 ${packageName}？`)) {
+  const confirmed = await confirmAction({
+    title: `卸载 ${packageName}？`,
+    message: `将在工作区执行 npm uninstall ${packageName}，相关类型提示会同步移除。`,
+    confirmLabel: '卸载',
+    danger: true,
+  });
+  if (!confirmed) {
     return;
   }
   await performNpmOperation('uninstall', { names: [packageName] }, `卸载 ${packageName}`);
@@ -975,7 +1144,7 @@ function handleRunExit(payload) {
 }
 
 function handleAppCommand(command) {
-  if (command === 'new') newFile();
+  if (command === 'new') void newFile();
   if (command === 'open') void openFile();
   if (command === 'save') void saveFile(false);
   if (command === 'save-as') void saveFile(true);
@@ -984,23 +1153,14 @@ function handleAppCommand(command) {
 }
 
 function bindEvents() {
-  elements.newButton.addEventListener('click', newFile);
+  elements.newButton.addEventListener('click', () => void newFile());
   elements.openButton.addEventListener('click', () => void openFile());
   elements.saveButton.addEventListener('click', () => void saveFile(false));
   elements.saveAsButton.addEventListener('click', () => void saveFile(true));
-  elements.languageSelect.addEventListener('change', () => {
-    setLanguage(elements.languageSelect.value);
-  });
-  elements.runModeSelect.addEventListener('change', () => {
-    state.runMode = elements.runModeSelect.value === 'live' ? 'live' : 'manual';
-    persistScratch();
-    updateStatusText();
-    if (state.runMode === 'live') {
-      scheduleAutoRun(80);
-    } else {
-      cancelAutoRun();
-    }
-  });
+  elements.languageTypeScriptButton.addEventListener('click', () => setLanguage('typescript'));
+  elements.languageJavaScriptButton.addEventListener('click', () => setLanguage('javascript'));
+  elements.runModeManualButton.addEventListener('click', () => setRunMode('manual'));
+  elements.runModeLiveButton.addEventListener('click', () => setRunMode('live'));
   elements.clearOutputOnRunCheckbox.addEventListener('change', () => {
     state.clearOutputOnRun = elements.clearOutputOnRunCheckbox.checked;
     storageSet('offlineJsLab.clearOutputOnRun', state.clearOutputOnRun);
@@ -1042,9 +1202,19 @@ async function initialize() {
 
   try {
     const bootstrap = await api.getBootstrap();
+    document.body.classList.toggle('platform-darwin', bootstrap.platform === 'darwin');
     elements.versionText.textContent = `v${bootstrap.appVersion}`;
-    elements.runShortcut.textContent = bootstrap.platform === 'darwin' ? '⌘↵' : 'Ctrl+Enter';
-    elements.runtimeText.textContent = `Node ${bootstrap.nodeRuntime.command}`;
+    const isMac = bootstrap.platform === 'darwin';
+    const runShortcutText = isMac ? '⌘↵' : 'Ctrl+Enter';
+    elements.runShortcut.textContent = runShortcutText;
+    elements.stopShortcut.textContent = isMac ? '⌘.' : 'Ctrl+.';
+    const placeholder = elements.output.querySelector('.output-placeholder');
+    if (placeholder) {
+      placeholder.textContent = `按 ${runShortcutText} 运行当前脚本，输出会显示在这里。`;
+    }
+    elements.runtimeText.textContent = bootstrap.nodeVersion
+      ? `Node ${bootstrap.nodeVersion}`
+      : 'Node';
     elements.runtimeText.title = `${bootstrap.nodeRuntime.command}（${bootstrap.nodeRuntime.source}）`;
     renderPackageState(bootstrap.packages);
 
