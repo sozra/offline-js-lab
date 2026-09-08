@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self' 'unsafe-eval' data:; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; worker-src 'self' data: blob:; connect-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Offline JS Lab</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div class="brand-block">
+          <div class="brand-mark" aria-hidden="true">JS</div>
+          <div>
+            <h1>Offline JS Lab</h1>
+            <p>JavaScript / TypeScript Scratchpad</p>
+          </div>
+        </div>
+
+        <div class="toolbar" aria-label="主工具栏">
+          <div class="toolbar-group">
+            <button id="new-button" class="button button-ghost" type="button">新建</button>
+            <button id="open-button" class="button button-ghost" type="button">打开</button>
+            <button id="save-button" class="button button-ghost" type="button">保存</button>
+            <button id="save-as-button" class="button button-ghost compact-only" type="button">
+              另存为
+            </button>
+          </div>
+
+          <div class="toolbar-divider" aria-hidden="true"></div>
+
+          <label class="compact-field">
+            <span>语言</span>
+            <select id="language-select" aria-label="脚本语言">
+              <option value="typescript">TypeScript</option>
+              <option value="javascript">JavaScript</option>
+            </select>
+          </label>
+
+          <label class="compact-field run-mode-field">
+            <span>运行</span>
+            <select id="run-mode-select" aria-label="运行模式">
+              <option value="manual">手动</option>
+              <option value="live">实时</option>
+            </select>
+          </label>
+
+          <button id="run-button" class="button button-primary" type="button">
+            <span>运行</span>
+            <kbd id="run-shortcut">Ctrl+Enter</kbd>
+          </button>
+          <button id="stop-button" class="button button-danger" type="button" disabled>
+            停止
+          </button>
+
+          <div class="toolbar-divider" aria-hidden="true"></div>
+          <button id="packages-button" class="button button-secondary" type="button">
+            包与工作区
+          </button>
+        </div>
+      </header>
+
+      <main id="split-view" class="split-view">
+        <section id="editor-pane" class="pane editor-pane" aria-label="代码编辑器">
+          <div class="pane-header">
+            <div class="file-identity">
+              <span id="file-name">未命名.ts</span>
+              <span id="dirty-indicator" class="dirty-indicator" hidden>未保存</span>
+            </div>
+            <span id="editor-message" class="subtle-message">正在初始化编辑器…</span>
+          </div>
+          <div id="editor" class="editor-host"></div>
+        </section>
+
+        <div
+          id="splitter"
+          class="splitter"
+          role="separator"
+          aria-label="调整代码与输出区域宽度"
+          aria-orientation="vertical"
+          aria-valuemin="15"
+          aria-valuemax="85"
+          aria-valuenow="50"
+          tabindex="0"
+          title="拖动调整宽度；双击恢复 50:50"
+        >
+          <span aria-hidden="true"></span>
+        </div>
+
+        <section id="output-pane" class="pane output-pane" aria-label="运行输出">
+          <div class="pane-header output-header">
+            <div class="output-title-group">
+              <strong>输出</strong>
+              <span id="run-status" class="status-pill status-idle">空闲</span>
+            </div>
+            <div class="output-actions">
+              <label
+                class="checkbox-field output-clear-option"
+                title="开启后，手动运行和实时运行都会在开始前清空输出"
+              >
+                <input
+                  id="clear-output-on-run-checkbox"
+                  type="checkbox"
+                  aria-label="每次运行前清空输出"
+                  checked
+                />
+                <span>运行前清空</span>
+              </label>
+              <button id="clear-output-button" class="button button-ghost button-small" type="button">
+                清空
+              </button>
+            </div>
+          </div>
+          <div id="output" class="output-view" role="log" aria-live="polite">
+            <span class="output-placeholder">运行结果会显示在这里。</span>
+          </div>
+        </section>
+      </main>
+
+      <footer class="statusbar">
+        <span id="status-text">正在初始化…</span>
+        <span id="runtime-text">Node —</span>
+        <span id="version-text">v—</span>
+      </footer>
+    </div>
+
+    <dialog id="packages-dialog" class="settings-dialog">
+      <div class="dialog-shell">
+        <header class="dialog-header">
+          <div>
+            <h2>包与工作区</h2>
+            <p>低频设置集中在这里，不占用日常编辑空间。</p>
+          </div>
+          <button id="close-dialog-button" class="icon-button" type="button" aria-label="关闭">
+            ×
+          </button>
+        </header>
+
+        <div class="dialog-content">
+          <section class="settings-section">
+            <div class="section-heading">
+              <div>
+                <h3>工作区</h3>
+                <p>脚本依赖安装到此目录的 node_modules。</p>
+              </div>
+            </div>
+            <div id="workspace-path" class="path-box">—</div>
+            <div class="button-row">
+              <button id="choose-workspace-button" class="button button-secondary" type="button">
+                更换目录
+              </button>
+              <button id="open-workspace-button" class="button button-ghost" type="button">
+                打开文件夹
+              </button>
+            </div>
+          </section>
+
+          <section class="settings-section">
+            <div class="section-heading">
+              <div>
+                <h3>npm 安装</h3>
+                <p id="npm-runtime-text">使用当前 Node/npm 环境及其 .npmrc 配置。</p>
+              </div>
+            </div>
+
+            <label class="field-label" for="package-input">包名，可用空格或换行分隔</label>
+            <textarea
+              id="package-input"
+              class="package-input"
+              rows="2"
+              spellcheck="false"
+              placeholder="lodash dayjs"
+            ></textarea>
+
+            <div class="npm-actions">
+              <label class="checkbox-field">
+                <input id="dev-dependency-checkbox" type="checkbox" />
+                <span>保存为 devDependency</span>
+              </label>
+              <div class="npm-action-buttons">
+                <button id="sync-packages-button" class="button button-ghost" type="button">
+                  同步 package.json
+                </button>
+                <button id="install-packages-button" class="button button-primary" type="button">
+                  npm install
+                </button>
+                <button id="stop-package-button" class="button button-danger" type="button" hidden>
+                  停止 npm
+                </button>
+              </div>
+            </div>
+            <p class="settings-note">
+              例如先安装 <code>lodash dayjs</code>；需要 Lodash 类型提示时，再勾选开发依赖安装
+              <code>@types/lodash</code>。
+            </p>
+          </section>
+
+          <section class="settings-section installed-section">
+            <div class="section-heading section-heading-inline">
+              <div>
+                <h3>直接依赖</h3>
+                <p>来自工作区 package.json。</p>
+              </div>
+              <button id="refresh-packages-button" class="button button-ghost button-small" type="button">
+                刷新
+              </button>
+            </div>
+            <div id="installed-package-list" class="installed-list">
+              <div class="empty-state">尚未安装包</div>
+            </div>
+          </section>
+        </div>
+
+        <footer class="dialog-footer">
+          <span id="npm-status-text">npm 空闲</span>
+          <button id="dialog-done-button" class="button button-secondary" type="button">完成</button>
+        </footer>
+      </div>
+    </dialog>
+
+    <div id="toast-region" class="toast-region" aria-live="polite"></div>
+    <script src="./app.js" defer></script>
+  </body>
+</html>

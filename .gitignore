@@ -1,0 +1,8 @@
+node_modules/
+release/
+*.log
+.DS_Store
+Thumbs.db
+
+# Workspace artifacts when a workspace is placed under the source tree
+.offline-js-lab/
